@@ -1,0 +1,86 @@
+import kagglehub
+import os
+import pandas as pd
+
+# Download latest version
+path = kagglehub.dataset_download("darkmatternet/s-and-p-500-stocks-25-years-of-data-updated-daily")
+
+print("Path to dataset files:", path)
+print(os.listdir(path)) # List all files in the directory
+
+file = os.path.join(path, "sp500_stocks.csv") # choose "sp500_stocks"
+data = pd.read_csv(file) # this is our data
+
+print(data.shape) # Rows
+print(data.columns) # Columns
+print(data.head()) 
+print(data["date"].min())
+print(data["date"].max())
+
+data["date"] = pd.to_datetime(data["date"]) # Scalar to date
+
+# Data from the past 10 years
+data_10y = data[
+    (data["date"] >= "2016-09-30") &
+    (data["date"] <= "2026-09-25")
+].copy()
+
+print("First date:", data_10y["date"].min())
+print("Last date:", data_10y["date"].max())
+print("Number of stocks:", data_10y["symbol"].nunique()) # Count number of distinct symbols
+print("Number of observations:", len(data_10y))
+#print(len(data))
+
+# take the data that is the 10 years time period
+coverage = data_10y.groupby("symbol")["date"].agg(["min", "max", "count"])
+print(coverage)
+
+# take only stocks containing all datapoints
+complete_stocks = coverage[ 
+    (coverage["count"] == 2510)
+]
+
+print("Stocks covering the full period:", len(complete_stocks))
+
+# # Extract the symbols (stock tickers) of the stocks with complete data
+symbols = complete_stocks.index
+
+
+# Asks for every row: "Is the stock symbol in my list of 466 selected stocks?"
+data_complete = data_10y[
+    data_10y["symbol"].isin(symbols)
+].copy()
+
+print(data_10y["symbol"].isin(symbols))
+
+print(data_10y["symbol"].isin(symbols).value_counts())
+
+print(data_complete.shape) #1,172,169 rows, 7 columns
+print(data_complete["symbol"].nunique())
+
+
+prices = data_complete.pivot(
+    index="date",
+    columns="symbol",
+    values="close"
+)
+
+print(prices.shape) # (2510, 466)
+print(prices.head())
+
+### ASSET RETURNS ###
+
+# Take the last available closing price in each week
+weekly_prices = prices.resample("W-FRI").last()
+
+print(weekly_prices.head())
+print(weekly_prices.shape)
+
+
+# Fractional change between the current and a prior element.
+weekly_returns = weekly_prices.pct_change(fill_method=None).iloc[1:]
+print(weekly_returns.head())
+print(weekly_returns.shape)
+
+# Save weekly asset returns
+weekly_returns.to_csv("weekly_returns_SP500.csv")
