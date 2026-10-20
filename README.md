@@ -1,4 +1,6 @@
-PUK written by Luna Veje Lynge
+# Chance Contrained Problems
+
+PUK written by Luna Veje Lynge.
 
 This folder provides the code used for my PUK.
 
