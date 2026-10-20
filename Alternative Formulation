@@ -1,0 +1,79 @@
+import gurobipy as gp
+from gurobipy import GRB
+import pandas as pd
+import numpy as np
+import os
+
+os.chdir("/Users/lunavejelynge/PUK")
+print(os.getcwd())
+
+# IMPORT DATA
+data = pd.read_csv("weekly_returns_SP500.csv", index_col=0)
+print(data.head())
+
+# CHOOSE FEWER ASSSETS AND SCENARIOS
+np.random.seed(2026)
+n_select = 10
+S_select = 50
+
+selected_assets = np.random.choice(
+    data.columns,
+    size=n_select,
+    replace=False
+)
+
+selected_scenarios = np.random.choice(
+    data.index,
+    size = S_select,
+    replace = False
+)
+
+# Keep only the selected scenarios and assets
+data_selected = data.loc[selected_scenarios, selected_assets]
+
+# BEGIN MODEL
+model_T = gp.Model("advanced_chance_constraint")
+
+# NUMBER OF VARIABLES AND SCENARIOS
+r = data_selected.to_numpy()
+#print(r)
+n = r.shape[1] # number of stocks (466)
+S = r.shape[0] # number of weekly returns (521)
+pi = 1/S
+b = 0.01
+a = r
+alpha = 0.7
+C = np.eye(n)
+d = np.ones(n)
+
+
+# VARIABLES
+x = model_T.addMVar(n, lb=0, ub = 1)
+x1 = model_T.addMVar((S, n), lb = 0)
+x0 = model_T.addMVar((S, n), lb = 0)
+y = model_T.addMVar(S, vtype=GRB.BINARY)
+
+
+# CONSTRAINTS
+model_T.addConstr(sum(pi * y[s] for s in range(S)) >= alpha)
+
+for s in range(S):
+    model_T.addConstr(x == x1[s] + x0[s])
+
+    model_T.addConstr(a[s] @ x1[s] >= b * y[s])
+
+    model_T.addConstr(C @ x1[s] <= d * y[s])
+
+    model_T.addConstr(C @ x0[s] <= d * (1-y[s]))
+
+
+# OBJECT FUNCTION
+model_T.setObjective(x.sum(), GRB.MINIMIZE)
+
+model_T.setParam("TimeLimit", 600)
+
+model_T.optimize()
+
+if model_T.SolCount > 0:
+    print("Objective:", model_T.ObjVal)
+    print("x =", x.X)
